@@ -744,39 +744,6 @@ with middle_panel:
             params.voice_name = ""
             config.ui["voice_name"] = ""
 
-        # 只有在有声音可选时才显示试听按钮
-        if friendly_names and st.button(tr("Play Voice")):
-            play_content = params.video_subject
-            if not play_content:
-                play_content = params.video_script
-            if not play_content:
-                play_content = tr("Voice Example")
-            with st.spinner(tr("Synthesizing Voice")):
-                temp_dir = utils.storage_dir("temp", create=True)
-                audio_file = os.path.join(temp_dir, f"tmp-voice-{str(uuid4())}.mp3")
-                sub_maker = voice.tts(
-                    text=play_content,
-                    voice_name=voice_name,
-                    voice_rate=params.voice_rate,
-                    voice_file=audio_file,
-                    voice_volume=params.voice_volume,
-                )
-                # if the voice file generation failed, try again with a default content.
-                if not sub_maker:
-                    play_content = "This is a example voice. if you hear this, the voice synthesis failed with the original content."
-                    sub_maker = voice.tts(
-                        text=play_content,
-                        voice_name=voice_name,
-                        voice_rate=params.voice_rate,
-                        voice_file=audio_file,
-                        voice_volume=params.voice_volume,
-                    )
-
-                if sub_maker and os.path.exists(audio_file):
-                    st.audio(audio_file, format="audio/mp3")
-                    if os.path.exists(audio_file):
-                        os.remove(audio_file)
-
         # 当选择V2版本或者声音是V2声音时，显示服务区域和API key输入框
         if selected_tts_server == "azure-tts-v2" or (
             voice_name and voice.is_azure_v2_voice(voice_name)
@@ -839,6 +806,7 @@ with middle_panel:
             config.siliconflow["api_key"] = siliconflow_api_key
             config.ui["siliconflow_custom_voice"] = siliconflow_custom_voice
             if siliconflow_custom_voice.startswith("speech:"):
+                voice_name = siliconflow_custom_voice
                 params.voice_name = siliconflow_custom_voice
                 config.ui["voice_name"] = siliconflow_custom_voice
 
@@ -853,6 +821,37 @@ with middle_panel:
             options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.8, 2.0],
             index=2,
         )
+
+        if friendly_names and st.button(tr("Play Voice")):
+            play_content = params.video_subject
+            if not play_content:
+                play_content = params.video_script
+            if not play_content:
+                play_content = tr("Voice Example")
+            with st.spinner(tr("Synthesizing Voice")):
+                temp_dir = utils.storage_dir("temp", create=True)
+                audio_file = os.path.join(temp_dir, f"tmp-voice-{str(uuid4())}.mp3")
+                sub_maker = voice.tts(
+                    text=play_content,
+                    voice_name=voice_name,
+                    voice_rate=params.voice_rate,
+                    voice_file=audio_file,
+                    voice_volume=params.voice_volume,
+                )
+                if not sub_maker:
+                    play_content = "This is a example voice. if you hear this, the voice synthesis failed with the original content."
+                    sub_maker = voice.tts(
+                        text=play_content,
+                        voice_name=voice_name,
+                        voice_rate=params.voice_rate,
+                        voice_file=audio_file,
+                        voice_volume=params.voice_volume,
+                    )
+
+                if sub_maker and os.path.exists(audio_file):
+                    st.audio(audio_file, format="audio/mp3")
+                    if os.path.exists(audio_file):
+                        os.remove(audio_file)
 
         bgm_options = [
             (tr("No Background Music"), ""),
