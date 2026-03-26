@@ -703,6 +703,7 @@ with middle_panel:
 
         saved_voice_name = config.ui.get("voice_name", "")
         saved_voice_name_index = 0
+        voice_name = saved_voice_name
 
         # 检查保存的声音是否在当前筛选的声音列表中
         if saved_voice_name in friendly_names:
@@ -801,6 +802,9 @@ with middle_panel:
             voice_name and voice.is_siliconflow_voice(voice_name)
         ):
             saved_siliconflow_api_key = config.siliconflow.get("api_key", "")
+            saved_siliconflow_custom_voice = config.ui.get(
+                "siliconflow_custom_voice", ""
+            )
 
             siliconflow_api_key = st.text_input(
                 tr("SiliconFlow API Key"),
@@ -808,6 +812,13 @@ with middle_panel:
                 type="password",
                 key="siliconflow_api_key_input",
             )
+
+            siliconflow_custom_voice = st.text_input(
+                tr("SiliconFlow Cloned Voice URI"),
+                value=saved_siliconflow_custom_voice,
+                help="speech:your-voice-name:xxx:xxx",
+                key="siliconflow_custom_voice_input",
+            ).strip()
 
             # 显示硅基流动的说明信息
             st.info(
@@ -818,9 +829,18 @@ with middle_panel:
                 + "\n"
                 + "- "
                 + tr("Volume: Uses Speech Volume setting, default 1.0 maps to gain 0")
+                + "\n"
+                + "- "
+                + tr(
+                    "Cloned Voice URI overrides the selected built-in voice when provided"
+                )
             )
 
             config.siliconflow["api_key"] = siliconflow_api_key
+            config.ui["siliconflow_custom_voice"] = siliconflow_custom_voice
+            if siliconflow_custom_voice.startswith("speech:"):
+                params.voice_name = siliconflow_custom_voice
+                config.ui["voice_name"] = siliconflow_custom_voice
 
         params.voice_volume = st.selectbox(
             tr("Speech Volume"),
@@ -952,7 +972,9 @@ with right_panel:
 
             if config.app["pexels_api_keys"]:
                 delete_key = st.selectbox(
-                    tr("Select Pexels API Key to delete"), config.app["pexels_api_keys"], key="pexels_delete_key"
+                    tr("Select Pexels API Key to delete"),
+                    config.app["pexels_api_keys"],
+                    key="pexels_delete_key",
                 )
                 if st.button(tr("Delete Selected Pexels API Key")):
                     config.app["pexels_api_keys"].remove(delete_key)
@@ -982,7 +1004,9 @@ with right_panel:
 
             if config.app["pixabay_api_keys"]:
                 delete_key = st.selectbox(
-                    tr("Select Pixabay API Key to delete"), config.app["pixabay_api_keys"], key="pixabay_delete_key"
+                    tr("Select Pixabay API Key to delete"),
+                    config.app["pixabay_api_keys"],
+                    key="pixabay_delete_key",
                 )
                 if st.button(tr("Delete Selected Pixabay API Key")):
                     config.app["pixabay_api_keys"].remove(delete_key)
