@@ -410,6 +410,7 @@ def generate_video(
             bg_color=params.text_background_color,
             stroke_color=params.stroke_color,
             stroke_width=params.stroke_width,
+            text_align='center',
             # interline=interline,
             # size=size,
         )
