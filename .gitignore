@@ -33,3 +33,8 @@ debug/
 debug_*.py
 test_*.py
 streamlit.log
+# CocoIndex Code (ccc)
+/.cocoindex_code/
+.serena
+lightsTest
+*.bak
