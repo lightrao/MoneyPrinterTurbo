@@ -1029,7 +1029,16 @@ def _apply_pending_task_restore():
     _set_stable_widget_value("voice_mode_control", voice_mode)
     if tts_server != voice.NO_VOICE_NAME:
         _set_stable_widget_value("tts_server_select", tts_server)
-        _set_stable_widget_value(f"speech_synthesis_select_{tts_server}", voice_name)
+        if voice.is_siliconflow_cloned_voice(voice_name):
+            st.session_state["siliconflow_custom_voice_input"] = voice_name
+            _set_runtime_config("ui", "siliconflow_custom_voice", voice_name)
+        else:
+            _set_stable_widget_value(
+                f"speech_synthesis_select_{tts_server}", voice_name
+            )
+            if tts_server == "siliconflow":
+                st.session_state["siliconflow_custom_voice_input"] = ""
+                _delete_runtime_config("ui", "siliconflow_custom_voice")
     _set_stable_widget_value("voice_volume_select", params.get("voice_volume", 1.0))
     _set_stable_widget_value("voice_rate_select", params.get("voice_rate", 1.0))
     bgm_type = params.get("bgm_type") or ""
@@ -3413,6 +3422,25 @@ def _render_audio_settings(panel, params):
                 )
 
                 _set_runtime_config("siliconflow", "api_key", siliconflow_api_key)
+
+                siliconflow_custom_voice = st.text_input(
+                    tr("SiliconFlow Cloned Voice URI"),
+                    value=config.ui.get("siliconflow_custom_voice", ""),
+                    key="siliconflow_custom_voice_input",
+                    help=tr("SiliconFlow Cloned Voice URI Help"),
+                ).strip()
+                if voice.is_siliconflow_cloned_voice(siliconflow_custom_voice):
+                    _set_runtime_config(
+                        "ui", "siliconflow_custom_voice", siliconflow_custom_voice
+                    )
+                    voice_name = siliconflow_custom_voice
+                    params.voice_name = siliconflow_custom_voice
+                    _set_runtime_config("ui", "voice_name", siliconflow_custom_voice)
+                    st.caption(tr("SiliconFlow Cloned Voice Active"))
+                else:
+                    _delete_runtime_config("ui", "siliconflow_custom_voice")
+                    if siliconflow_custom_voice:
+                        st.warning(tr("SiliconFlow Cloned Voice URI Invalid"))
 
             # 当选择 Xiaomi MiMo TTS 时，复用 MiMo LLM provider 的 API Key。
             # 这样用户如果同时使用 MiMo 生成文案和语音，只需要维护一份密钥。
