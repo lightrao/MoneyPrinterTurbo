@@ -13,7 +13,13 @@ from app.controllers.manager.base_manager import TaskQueueFullError
 from app.controllers.v1 import video as video_controller
 from app.models import const
 from app.models.exception import HttpException
-from app.models.schema import TaskListResponse, TaskQueryResponse
+from app.models.schema import (
+    TaskListResponse,
+    TaskQueryResponse,
+    TaskVideoRequest,
+    VideoAspect,
+    VideoConcatMode,
+)
 from app.services import state as sm
 from app.utils import utils
 
@@ -149,6 +155,25 @@ class TestVideoControllerTasks(unittest.TestCase):
             params=body,
             stop_at="audio",
         )
+
+    def test_create_task_preserves_siliconflow_cloned_voice_uri(self):
+        cloned_voice = "speech:account:voice-id:token"
+        body = TaskVideoRequest(
+            video_subject="Cloned voice API request",
+            voice_name=cloned_voice,
+            video_aspect=VideoAspect.portrait,
+            video_concat_mode=VideoConcatMode.random,
+        )
+
+        with (
+            patch.object(video_controller.utils, "get_uuid", return_value="task-123"),
+            patch.object(video_controller.sm.state, "update_task"),
+            patch.object(video_controller.task_manager, "add_task") as add_task,
+        ):
+            video_controller.create_task(self._request(), body, stop_at="video")
+
+        queued_params = add_task.call_args.kwargs["params"]
+        self.assertEqual(queued_params.voice_name, cloned_voice)
 
     def test_create_task_removes_state_when_queue_is_full(self):
         """队列已满时必须回滚刚创建的状态，并向调用方返回 429。"""

@@ -1,5 +1,6 @@
 import ast
 import hashlib
+import json
 import re
 import shutil
 from contextlib import nullcontext
@@ -10,7 +11,7 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 
 from app.config import config
-from app.models.schema import VideoParams
+from app.models.schema import VideoAspect, VideoConcatMode, VideoParams
 from app.services import task as tm
 from app.services import voice
 from app.services import webui_task
@@ -55,11 +56,41 @@ def _load_provider_signature(test_config):
     return namespace["_get_voice_preview_provider_signature"]
 
 
+def _load_voice_preview_fingerprint():
+    tree = ast.parse(WEBUI_MAIN.read_text(encoding="utf-8"))
+    function = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_voice_preview_fingerprint"
+    )
+    module = ast.Module(body=[function], type_ignores=[])
+    namespace = {"hashlib": hashlib, "json": json}
+    exec(compile(module, str(WEBUI_MAIN), "exec"), namespace)
+    return namespace["_voice_preview_fingerprint"]
+
+
 def _button_by_key(app, key):
     return next(
         button
         for button in app.button
         if str(getattr(button, "key", "")).startswith(key)
+    )
+
+
+def _text_input_by_key(app, key):
+    return next(
+        text_input
+        for text_input in app.text_input
+        if str(getattr(text_input, "key", "")) == key
+    )
+
+
+def _selectbox_by_key(app, key):
+    return next(
+        selectbox
+        for selectbox in app.selectbox
+        if str(getattr(selectbox, "key", "")).startswith(key)
     )
 
 
@@ -101,6 +132,181 @@ def test_provider_signature_changes_when_api_key_changes():
     assert old_signature != new_signature
     assert "old-elevenlabs" not in str(old_signature)
     assert "new-elevenlabs" not in str(new_signature)
+
+
+def test_cloned_voice_uri_changes_preview_fingerprint():
+    fingerprint = _load_voice_preview_fingerprint()
+    common = {
+        "preview_type": "sample",
+        "content": "Preview",
+        "tts_server": "siliconflow",
+        "voice_rate": 1.0,
+        "voice_volume": 1.0,
+        "provider_signature": {"credential": "hashed-key"},
+    }
+
+    first = fingerprint(voice_name="speech:account:first:token", **common)
+    second = fingerprint(voice_name="speech:account:second:token", **common)
+
+    assert first != second
+
+
+def test_siliconflow_cloned_voice_is_used_for_preview_and_cache():
+    cloned_voice = "speech:account:voice-id:token"
+    test_ui = dict(
+        config.ui,
+        voice_mode="tts",
+        tts_server="siliconflow",
+        voice_name="siliconflow:FunAudioLLM/CosyVoice2-0.5B:alex-Male",
+        siliconflow_custom_voice=cloned_voice,
+    )
+    test_siliconflow = {"api_key": "test-api-key"}
+
+    def fake_tts(**kwargs):
+        Path(kwargs["voice_file"]).write_bytes(b"ID3" + b"\x00" * 32)
+        return object()
+
+    with (
+        patch.object(config, "ui", test_ui),
+        patch.object(config, "siliconflow", test_siliconflow),
+        patch.object(config, "save_config"),
+        patch.object(voice, "tts", side_effect=fake_tts) as synthesize,
+        patch.object(voice, "get_audio_duration", return_value=3.0),
+    ):
+        app = AppTest.from_file(str(WEBUI_MAIN), default_timeout=30)
+        app.session_state["ui_language"] = "zh"
+        app.run()
+        _button_by_key(app, "play_voice_button").click().run()
+        _button_by_key(app, "play_voice_button").click().run()
+
+    synthesize.assert_called_once()
+    assert synthesize.call_args.kwargs["voice_name"] == cloned_voice
+    assert any("克隆音色 URI" in item.value for item in app.caption)
+    assert [str(item.value) for item in app.exception] == []
+
+
+def test_clearing_siliconflow_cloned_voice_restores_builtin_voice():
+    cloned_voice = "speech:account:voice-id:token"
+    test_ui = dict(
+        config.ui,
+        voice_mode="tts",
+        tts_server="siliconflow",
+        voice_name="siliconflow:FunAudioLLM/CosyVoice2-0.5B:alex-Male",
+        siliconflow_custom_voice=cloned_voice,
+    )
+    test_siliconflow = {"api_key": "test-api-key"}
+
+    def fake_tts(**kwargs):
+        Path(kwargs["voice_file"]).write_bytes(b"ID3" + b"\x00" * 32)
+        return object()
+
+    with (
+        patch.object(config, "ui", test_ui),
+        patch.object(config, "siliconflow", test_siliconflow),
+        patch.object(config, "save_config"),
+        patch.object(voice, "tts", side_effect=fake_tts) as synthesize,
+        patch.object(voice, "get_audio_duration", return_value=3.0),
+    ):
+        app = AppTest.from_file(str(WEBUI_MAIN), default_timeout=30)
+        app.session_state["ui_language"] = "zh"
+        app.run()
+        _text_input_by_key(app, "siliconflow_custom_voice_input").set_value("").run()
+        _button_by_key(app, "play_voice_button").click().run()
+
+    assert "siliconflow_custom_voice" not in test_ui
+    assert synthesize.call_args.kwargs["voice_name"].startswith("siliconflow:")
+    assert [str(item.value) for item in app.exception] == []
+
+
+def test_invalid_siliconflow_cloned_voice_does_not_override_builtin_voice():
+    test_ui = dict(
+        config.ui,
+        voice_mode="tts",
+        tts_server="siliconflow",
+        voice_name="siliconflow:FunAudioLLM/CosyVoice2-0.5B:alex-Male",
+        siliconflow_custom_voice="invalid-cloned-voice",
+    )
+    test_siliconflow = {"api_key": "test-api-key"}
+
+    with (
+        patch.object(config, "ui", test_ui),
+        patch.object(config, "siliconflow", test_siliconflow),
+        patch.object(config, "save_config"),
+    ):
+        app = AppTest.from_file(str(WEBUI_MAIN), default_timeout=30)
+        app.session_state["ui_language"] = "zh"
+        app.run()
+
+    assert "siliconflow_custom_voice" not in test_ui
+    assert any("必须以 `speech:` 开头" in item.value for item in app.warning)
+    assert [str(item.value) for item in app.exception] == []
+
+
+def test_siliconflow_cloned_voice_survives_provider_switch_without_leaking():
+    cloned_voice = "speech:account:voice-id:token"
+    test_ui = dict(
+        config.ui,
+        voice_mode="tts",
+        tts_server="siliconflow",
+        voice_name="siliconflow:FunAudioLLM/CosyVoice2-0.5B:alex-Male",
+        siliconflow_custom_voice=cloned_voice,
+    )
+    test_siliconflow = {"api_key": "test-api-key"}
+
+    with (
+        patch.object(config, "ui", test_ui),
+        patch.object(config, "siliconflow", test_siliconflow),
+        patch.object(config, "save_config"),
+    ):
+        app = AppTest.from_file(str(WEBUI_MAIN), default_timeout=30)
+        app.session_state["ui_language"] = "zh"
+        app.run()
+        _selectbox_by_key(app, "tts_server_select").set_value("azure-tts-v1").run()
+
+        assert test_ui["siliconflow_custom_voice"] == cloned_voice
+        assert not str(test_ui["voice_name"]).startswith("speech:")
+
+        _selectbox_by_key(app, "tts_server_select").set_value("siliconflow").run()
+
+    assert _text_input_by_key(app, "siliconflow_custom_voice_input").value == cloned_voice
+    assert test_ui["voice_name"] == cloned_voice
+    assert [str(item.value) for item in app.exception] == []
+
+
+def test_task_restore_places_cloned_voice_in_dedicated_input():
+    cloned_voice = "speech:account:voice-id:token"
+    test_ui = dict(
+        config.ui,
+        voice_mode="tts",
+        tts_server="azure-tts-v1",
+        voice_name="zh-CN-XiaoxiaoNeural-Female",
+    )
+    test_siliconflow = {"api_key": "test-api-key"}
+    restored_params = VideoParams(
+        video_subject="Restore cloned voice",
+        video_script="Restored script",
+        voice_name=cloned_voice,
+        video_aspect=VideoAspect.portrait,
+        video_concat_mode=VideoConcatMode.random,
+    ).model_dump(mode="json")
+
+    with (
+        patch.object(config, "ui", test_ui),
+        patch.object(config, "siliconflow", test_siliconflow),
+        patch.object(config, "save_config"),
+    ):
+        app = AppTest.from_file(str(WEBUI_MAIN), default_timeout=30)
+        app.session_state["ui_language"] = "zh"
+        app.session_state["task_restore_payload"] = {
+            "task_id": "restore-cloned-voice",
+            "subject": "Restore cloned voice",
+            "params": restored_params,
+        }
+        app.run()
+
+    cloned_input = _text_input_by_key(app, "siliconflow_custom_voice_input")
+    assert cloned_input.value == cloned_voice
+    assert [str(item.value) for item in app.exception] == []
 
 
 def test_full_voiceover_preview_is_disabled_until_script_exists():

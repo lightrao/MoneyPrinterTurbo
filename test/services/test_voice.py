@@ -178,6 +178,75 @@ class TestVoiceService(unittest.TestCase):
         self.assertIs(result, sentinel)
         azure_tts_v1.assert_called_once()
 
+    def test_siliconflow_cloned_voice_prefix_detection(self):
+        cloned_voice = "speech:account:voice-id:token"
+
+        self.assertTrue(vs.is_siliconflow_cloned_voice(cloned_voice))
+        self.assertTrue(vs.is_siliconflow_voice(cloned_voice))
+        self.assertTrue(
+            vs.is_siliconflow_voice(
+                "siliconflow:FunAudioLLM/CosyVoice2-0.5B:alex-Male"
+            )
+        )
+        self.assertFalse(vs.is_siliconflow_cloned_voice("Speech:account:voice"))
+        self.assertFalse(vs.is_siliconflow_cloned_voice(""))
+        self.assertFalse(vs.is_siliconflow_voice(None))
+
+    def test_tts_dispatches_cloned_voice_with_fixed_model(self):
+        cloned_voice = "speech:account:voice-id:token"
+        sentinel = object()
+
+        with patch.object(
+            vs, "siliconflow_tts", return_value=sentinel
+        ) as siliconflow_tts:
+            result = vs.tts(
+                text="Cloned voice test",
+                voice_name=cloned_voice,
+                voice_rate=1.2,
+                voice_file="/tmp/cloned-voice.mp3",
+                voice_volume=1.5,
+            )
+
+        self.assertIs(result, sentinel)
+        siliconflow_tts.assert_called_once_with(
+            "Cloned voice test",
+            vs.SILICONFLOW_CLONED_VOICE_MODEL,
+            cloned_voice,
+            1.2,
+            "/tmp/cloned-voice.mp3",
+            1.5,
+        )
+
+    def test_siliconflow_cloned_voice_http_payload_keeps_uri_in_voice(self):
+        cloned_voice = "speech:account:voice-id:token"
+        response = SimpleNamespace(status_code=200, content=b"fake-mp3", text="")
+
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.dict(
+            vs.config.siliconflow,
+            {"api_key": "test-api-key"},
+        ), patch.object(
+            vs.requests, "post", return_value=response
+        ) as post, patch(
+            "moviepy.AudioFileClip"
+        ) as audio_clip, patch.object(vs.logger, "info") as log_info:
+            audio_clip.return_value.duration = 2.0
+            voice_file = str(Path(tmp_dir) / "cloned.mp3")
+            result = vs.siliconflow_tts(
+                text="Cloned voice payload",
+                model=vs.SILICONFLOW_CLONED_VOICE_MODEL,
+                voice=cloned_voice,
+                voice_rate=1.0,
+                voice_file=voice_file,
+                voice_volume=1.0,
+            )
+
+        self.assertIsNotNone(result)
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["model"], vs.SILICONFLOW_CLONED_VOICE_MODEL)
+        self.assertEqual(payload["voice"], cloned_voice)
+        self.assertNotEqual(payload["model"], cloned_voice)
+        self.assertNotIn(cloned_voice, str(log_info.call_args_list))
+
     @unittest.skipUnless(
         RUN_INTEGRATION_TESTS,
         "MPT_RUN_INTEGRATION_TESTS not set",

@@ -477,6 +477,29 @@ class TestTaskService(unittest.TestCase):
         self.assertEqual(failed_task["failed_stage"], "terms")
         self.assertTrue(failed_task["error"])
     
+    def test_generate_audio_preserves_siliconflow_cloned_voice_uri(self):
+        task_id = "test-siliconflow-cloned-voice"
+        cloned_voice = "speech:account:voice-id:token"
+        params = VideoParams(
+            video_subject="cloned voice",
+            video_script="",
+            voice_name=cloned_voice,
+            voice_rate=1.2,
+        )
+        sub_maker = object()
+
+        try:
+            with (
+                patch.object(tm.voice, "tts", return_value=sub_maker) as tts,
+                patch.object(tm.voice, "get_audio_duration", return_value=5),
+            ):
+                result = tm.generate_audio(task_id, params, "script")
+        finally:
+            shutil.rmtree(utils.task_dir(task_id), ignore_errors=True)
+
+        self.assertEqual(result[1:], (5, sub_maker))
+        self.assertEqual(tts.call_args.kwargs["voice_name"], cloned_voice)
+
     def test_generate_audio_uses_custom_file_inside_task_directory(self):
         task_id = "test-custom-audio-safe"
         task_dir = utils.task_dir(task_id)
