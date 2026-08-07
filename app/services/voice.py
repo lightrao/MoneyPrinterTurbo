@@ -29,6 +29,7 @@ from app.utils import utils
 _DEFAULT_EDGE_TTS_TIMEOUT_SECONDS = 30.0
 _MIMO_DEFAULT_BASE_URL = "https://api.xiaomimimo.com/v1"
 _MIMO_DEFAULT_TTS_MODEL = "mimo-v2.5-tts"
+SILICONFLOW_CLONED_VOICE_MODEL = "FunAudioLLM/CosyVoice2-0.5B"
 NO_VOICE_NAME = "no-voice"
 # `none` 是 PR #981 里曾使用过的无配音标识。这里短期兼容这个值，避免
 # 已经手动调用过该分支的 API 用户升级后立即失效；WebUI 和新代码统一使用
@@ -233,9 +234,15 @@ def is_azure_v2_voice(voice_name: str):
     return ""
 
 
-def is_siliconflow_voice(voice_name: str):
+def is_siliconflow_cloned_voice(voice_name: str | None) -> bool:
+    return str(voice_name or "").startswith("speech:")
+
+
+def is_siliconflow_voice(voice_name: str | None) -> bool:
     """检查是否是硅基流动的声音"""
-    return voice_name.startswith("siliconflow:")
+    return str(voice_name or "").startswith("siliconflow:") or is_siliconflow_cloned_voice(
+        voice_name
+    )
 
 
 def is_gemini_voice(voice_name: str):
@@ -381,6 +388,16 @@ def tts(
             voice_rate=voice_rate,
         )
     elif is_siliconflow_voice(voice_name):
+        if is_siliconflow_cloned_voice(voice_name):
+            return siliconflow_tts(
+                text,
+                SILICONFLOW_CLONED_VOICE_MODEL,
+                voice_name,
+                voice_rate,
+                voice_file,
+                voice_volume,
+            )
+
         # 从voice_name中提取模型和声音
         # 格式: siliconflow:model:voice-Gender
         parts = voice_name.split(":")
@@ -830,8 +847,12 @@ def siliconflow_tts(
 
     for i in range(3):  # 尝试3次
         try:
+            logged_voice = (
+                "speech:***" if is_siliconflow_cloned_voice(voice) else voice
+            )
             logger.info(
-                f"start siliconflow tts, model: {model}, voice: {voice}, try: {i + 1}"
+                f"start siliconflow tts, model: {model}, "
+                f"voice: {logged_voice}, try: {i + 1}"
             )
 
             response = requests.post(url, json=payload, headers=headers)
