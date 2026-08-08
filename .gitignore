@@ -1,6 +1,8 @@
 .DS_Store
 /config.toml
 /config.toml.bak
+/config.toml.bak-*
+/deploy/hp450/.env
 /storage/
 /.idea/
 /app/services/__pycache__

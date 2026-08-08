@@ -28,3 +28,17 @@ logs/
 
 storage/
 config.toml
+config.toml.bak
+config.toml.bak-*
+config.toml.*.bak
+config.toml.*.bak-*
+
+# Agent, editor, coverage, and local model artifacts
+.opencode/
+.cocoindex_code/
+.serena/
+.claude/
+.coverage
+coverage.xml
+htmlcov/
+models/

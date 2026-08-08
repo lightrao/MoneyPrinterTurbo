@@ -1,0 +1,74 @@
+name: moneyprinterturbo
+
+x-common-volumes: &common-volumes
+  - ./config.toml:/MoneyPrinterTurbo/config.toml:rw
+  - ./storage:/MoneyPrinterTurbo/storage:rw
+
+x-common-settings: &common-settings
+  pull_policy: always
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  webui:
+    <<: *common-settings
+    image: ${MPT_IMAGE:?MPT_IMAGE is required}
+    container_name: moneyprinterturbo-webui
+    ports:
+      - "127.0.0.1:8501:8501"
+    command:
+      - streamlit
+      - run
+      - ./webui/Main.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --browser.serverAddress=127.0.0.1
+      - --server.enableCORS=True
+      - --browser.gatherUsageStats=False
+      - --client.toolbarMode=minimal
+      - --logger.hideWelcomeMessage=True
+      - --server.showEmailPrompt=False
+    volumes: *common-volumes
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3).read()
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  api:
+    <<: *common-settings
+    image: ${MPT_IMAGE:?MPT_IMAGE is required}
+    container_name: moneyprinterturbo-api
+    ports:
+      - "127.0.0.1:8080:8080"
+    command:
+      - python3
+      - main.py
+    volumes: *common-volumes
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/openapi.json', timeout=3).read()
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
