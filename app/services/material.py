@@ -827,8 +827,10 @@ def save_material(
             logger.info(f"using private catalog material without copying: {catalog_path}")
             _record_private_catalog_use(item, task_id)
             return catalog_path
-    api_key = str(catalog_config.get("api_key", "")).strip()
-    download_headers = {"Authorization": api_key} if api_key else None
+    download_headers = None
+    if item.provider == "private_catalog":
+        api_key = str(catalog_config.get("api_key", "")).strip()
+        download_headers = {"Authorization": api_key} if api_key else None
     if download_headers:
         return save_video(
             video_url=item.url,

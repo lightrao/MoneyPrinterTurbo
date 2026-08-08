@@ -1166,6 +1166,19 @@ class TestPrivateMaterialCatalog(unittest.TestCase):
         self.assertEqual(path, "/tmp/fallback.mp4")
         save.assert_called_once_with(video_url=item.url, save_dir="")
 
+    def test_non_catalog_material_does_not_receive_catalog_read_key(self):
+        config.material_catalog.update({"api_key": "catalog-read-key"})
+        item = material.MaterialInfo(
+            provider="pexels",
+            url="https://example.com/pexels.mp4",
+            duration=8,
+        )
+        with patch.object(material, "save_video", return_value="/tmp/pexels.mp4") as save:
+            path = material.save_material(item)
+
+        self.assertEqual(path, "/tmp/pexels.mp4")
+        save.assert_called_once_with(video_url=item.url, save_dir="")
+
 
 if __name__ == "__main__":
     unittest.main()
