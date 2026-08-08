@@ -40,6 +40,11 @@ Push the deployment changes to `feat/siliconflow-cloned-voice-v2`, wait for the
 Python 3.11, Python 3.13, and Windows CI jobs to pass, then manually run
 `Publish Docker image` from that branch in GitHub Actions.
 
+If GitHub does not expose `workflow_dispatch` for a workflow that exists only
+on this feature branch, create a reviewed `v*` deployment tag on the exact
+CI-passing commit. The tag event is the release gate used for this fork; the
+server still deploys only the generated full `sha-` tag, never the tag itself.
+
 Confirm that the published artifact is:
 
 ```text
@@ -48,6 +53,23 @@ ghcr.io/lightrao/moneyprinterturbo:sha-<full-commit-sha>
 
 The package should be public so HP450 can pull it without a GitHub token. Never
 put a PAT in the repository, image, Compose file, or HP450 configuration.
+
+If direct HP450 layer transfer stalls, use the LAN fallback validated on this
+host. The Mac does not need Docker Desktop for this path:
+
+```bash
+/opt/homebrew/bin/crane pull --platform linux/amd64 --format tarball \
+  ghcr.io/lightrao/moneyprinterturbo:sha-<full-commit-sha> \
+  /private/tmp/moneyprinterturbo-<short-sha>.tar
+
+tar -tf /private/tmp/moneyprinterturbo-<short-sha>.tar >/dev/null
+scp /private/tmp/moneyprinterturbo-<short-sha>.tar \
+  hp450-lan:/data/projects/moneyprinterturbo/moneyprinterturbo-<short-sha>.tar.new
+```
+
+Compare SHA-256 on both sides before loading the temporary file. After the
+image is loaded and healthchecks pass, remove the archive and start Compose
+with `--pull never` so a transient GHCR issue cannot trigger another pull.
 
 ## HP450 layout
 
@@ -126,7 +148,7 @@ Pull and start only this Compose project:
 ssh hp450-lan 'set -eu
   cd /data/projects/moneyprinterturbo
   docker compose --env-file .env -f compose.yml pull
-  docker compose --env-file .env -f compose.yml up -d --remove-orphans'
+  docker compose --env-file .env -f compose.yml up -d --pull never --remove-orphans'
 ```
 
 Do not use `docker system prune`, `docker compose down` in another project,
@@ -186,7 +208,7 @@ manual action and may incur provider charges.
 3. Manually publish the image and verify its full SHA tag is public.
 4. Back up `.env` and record the current healthy SHA.
 5. Replace only `MPT_IMAGE` in `.env` with the new SHA.
-6. Run `docker compose pull` and `docker compose up -d --remove-orphans`.
+6. Run `docker compose pull` and `docker compose up -d --pull never --remove-orphans`.
 7. Wait for both healthchecks, then inspect logs and preserve the old image.
 
 ## Rollback
@@ -199,7 +221,7 @@ ssh hp450-lan 'set -eu
   cp -p .env backups/env.bak-$(date -u +%Y%m%dT%H%M%SZ)
   sed -i -E "s#^MPT_IMAGE=.*#MPT_IMAGE=ghcr.io/lightrao/moneyprinterturbo:sha-<previous-full-sha>#" .env
   docker compose --env-file .env -f compose.yml pull
-  docker compose --env-file .env -f compose.yml up -d --remove-orphans'
+  docker compose --env-file .env -f compose.yml up -d --pull never --remove-orphans'
 ```
 
 Do not run `down -v`. If the failure is configuration-related, stop this
