@@ -91,6 +91,36 @@ class TestMaterialSearchCache(unittest.TestCase):
             "https://pixabay.com/users/creator-456/",
         )
 
+    def test_private_catalog_cache_preserves_catalog_path(self):
+        item = MaterialInfo(
+            provider="private_catalog",
+            url="http://mpt-material-api:8080/v1/videos/123/file",
+            duration=8,
+            catalog_path="ab/cd/video.mp4",
+            source_info={
+                "provider": "private_catalog",
+                "asset_id": "123",
+                "source_page": "https://www.pexels.com/video/123/",
+                "rendition": {"id": "9", "width": 1080, "height": 1920},
+            },
+        )
+        self.assertTrue(
+            material_cache.save_material_search_cache(
+                provider="private_catalog",
+                search_term="growth",
+                minimum_duration=5,
+                video_aspect=VideoAspect.portrait,
+                items=[item],
+            )
+        )
+        loaded = material_cache.load_material_search_cache(
+            provider="private_catalog",
+            search_term="growth",
+            minimum_duration=5,
+            video_aspect=VideoAspect.portrait,
+        )
+        self.assertEqual(loaded[0].catalog_path, "ab/cd/video.mp4")
+
     def test_expired_cache_is_removed_and_treated_as_miss(self):
         """
         Pixabay 要求搜索结果最多复用 24 小时。过期文件必须立即失效并删除，

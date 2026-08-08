@@ -1069,5 +1069,103 @@ class TestCoverrProvider(unittest.TestCase):
         self.assertEqual(result, ["/tmp/coverr-saved.mp4"])
 
 
+class TestPrivateMaterialCatalog(unittest.TestCase):
+    def setUp(self):
+        self.original_catalog_config = dict(config.material_catalog)
+        self.original_proxy_config = dict(config.proxy)
+
+    def tearDown(self):
+        config.material_catalog.clear()
+        config.material_catalog.update(self.original_catalog_config)
+        config.proxy.clear()
+        config.proxy.update(self.original_proxy_config)
+
+    def test_private_catalog_search_uses_catalog_contract_and_exact_resolution(self):
+        config.material_catalog.update(
+            {
+                "mode": "local",
+                "base_url": "http://mpt-material-api:8080",
+                "api_key": "catalog-read-key",
+                "share_volume": "/MaterialCatalog/videos",
+            }
+        )
+        fake_response = SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "videos": [
+                    {
+                        "id": 123,
+                        "duration": 8,
+                        "url": "https://www.pexels.com/video/123/?token=drop",
+                        "user": {"id": 7, "name": "Author", "url": "https://www.pexels.com/@author/"},
+                        "video_files": [
+                            {
+                                "id": 9,
+                                "width": 1080,
+                                "height": 1920,
+                                "link": "http://mpt-material-api:8080/v1/videos/123/file",
+                                "catalog_path": "ab/cd/video.mp4",
+                            },
+                            {
+                                "id": 10,
+                                "width": 1920,
+                                "height": 1080,
+                                "link": "http://mpt-material-api:8080/v1/videos/123/file",
+                            },
+                        ],
+                    }
+                ]
+            },
+        )
+        with patch("app.services.material.requests.get", return_value=fake_response) as get:
+            results = material.search_videos_private_catalog(
+                "growth", minimum_duration=5, video_aspect=material.VideoAspect.portrait
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].provider, "private_catalog")
+        self.assertEqual(results[0].catalog_path, "ab/cd/video.mp4")
+        self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "catalog-read-key")
+        self.assertEqual(get.call_args.kwargs["params"]["orientation"], "portrait")
+
+    def test_private_catalog_material_does_not_copy_shared_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            shared_root = Path(temp_dir)
+            shared_file = shared_root / "ab" / "cd" / "video.mp4"
+            shared_file.parent.mkdir(parents=True)
+            shared_file.write_bytes(b"catalog-video")
+            config.material_catalog.update(
+                {
+                    "mode": "local",
+                    "share_volume": str(shared_root),
+                }
+            )
+            item = material.MaterialInfo(
+                provider="private_catalog",
+                url="http://mpt-material-api:8080/v1/videos/123/file",
+                catalog_path="ab/cd/video.mp4",
+                duration=8,
+            )
+            with patch.object(material, "save_video") as save:
+                path = material.save_material(item)
+
+        self.assertEqual(path, str(shared_file.resolve()))
+        save.assert_not_called()
+
+    def test_private_catalog_path_escape_falls_back_to_normal_downloader(self):
+        config.material_catalog["share_volume"] = tempfile.gettempdir()
+        item = material.MaterialInfo(
+            provider="private_catalog",
+            url="https://example.com/catalog.mp4",
+            catalog_path="../outside.mp4",
+            duration=8,
+        )
+        with patch.object(material, "save_video", return_value="/tmp/fallback.mp4") as save:
+            path = material.save_material(item)
+
+        self.assertEqual(path, "/tmp/fallback.mp4")
+        save.assert_called_once_with(video_url=item.url, save_dir="")
+
+
 if __name__ == "__main__":
     unittest.main()

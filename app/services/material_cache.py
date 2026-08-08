@@ -99,6 +99,17 @@ def _cached_source_info(item: MaterialInfo) -> dict | None:
     return cached
 
 
+def _safe_catalog_path(value) -> str | None:
+    """Keep only relative catalog paths in the optional search cache field."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = value.replace("\\", "/").strip()
+    parts = path.split("/")
+    if path.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+        return None
+    return path
+
+
 def _cache_dir() -> Path:
     """
     返回所有运行入口共用的素材搜索缓存目录。
@@ -284,6 +295,7 @@ def load_material_search_cache(
                     provider=item_provider,
                     url=item_url,
                     duration=int(item_duration),
+                    catalog_path=_safe_catalog_path(raw_item.get("catalog_path")),
                     source_info=source_info,
                 )
             )
@@ -330,6 +342,7 @@ def save_material_search_cache(
                     "provider": item.provider,
                     "url": item.url,
                     "duration": int(item.duration),
+                    "catalog_path": _safe_catalog_path(item.catalog_path),
                     "source_info": source_info,
                 }
             )

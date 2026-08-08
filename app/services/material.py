@@ -373,6 +373,100 @@ def search_videos_pexels(
     return []
 
 
+def search_videos_private_catalog(
+    search_term: str,
+    minimum_duration: int,
+    video_aspect: VideoAspect = VideoAspect.portrait,
+) -> List[MaterialInfo]:
+    """Search the local-first MPTMaterialCatalog without contacting Pexels."""
+    aspect = VideoAspect(video_aspect)
+    width, height = aspect.to_resolution()
+    catalog_config = getattr(config, "material_catalog", {})
+    base_url = str(catalog_config.get("base_url", "")).strip().rstrip("/")
+    if not base_url:
+        logger.error("private material catalog is not configured")
+        return []
+
+    headers = {"User-Agent": "MoneyPrinterTurbo/1.0"}
+    api_key = str(catalog_config.get("api_key", "")).strip()
+    if api_key:
+        headers["Authorization"] = api_key
+    try:
+        response = requests.get(
+            f"{base_url}/v1/videos/search",
+            params={
+                "query": search_term,
+                "per_page": 80,
+                "orientation": aspect.name,
+                "minimum_duration": minimum_duration,
+            },
+            headers=headers,
+            proxies=config.proxy,
+            verify=_get_tls_verify(),
+            timeout=(15, 60),
+        )
+        status_code = int(getattr(response, "status_code", 200))
+        if status_code >= 400:
+            logger.error(
+                f"private material catalog search failed: status={status_code}"
+            )
+            return []
+        payload = response.json()
+        results: List[MaterialInfo] = []
+        for video in payload.get("videos", []):
+            try:
+                duration = int(float(video.get("duration", 0)))
+            except (TypeError, ValueError):
+                continue
+            if duration < minimum_duration:
+                continue
+            selected_file = None
+            for video_file in video.get("video_files", []):
+                try:
+                    matches_dimensions = int(video_file.get("width", 0)) == width and int(
+                        video_file.get("height", 0)
+                    ) == height
+                except (TypeError, ValueError):
+                    continue
+                if matches_dimensions:
+                    selected_file = video_file
+                    break
+            if not selected_file:
+                continue
+            item = MaterialInfo(
+                provider="private_catalog",
+                url=str(selected_file.get("link", "")),
+                duration=duration,
+                catalog_path=selected_file.get("catalog_path"),
+                source_info={
+                    "provider": "private_catalog",
+                    "search_term": search_term,
+                    "asset_id": (
+                        str(video.get("id")) if video.get("id") is not None else None
+                    ),
+                    "source_page": _safe_public_url(video.get("url")),
+                    "creator": _creator_info(video.get("user")),
+                    "rendition": {
+                        "id": (
+                            str(selected_file.get("id"))
+                            if selected_file.get("id") is not None
+                            else None
+                        ),
+                        "width": width,
+                        "height": height,
+                    },
+                },
+            )
+            results.append(item)
+        return results
+    except Exception as exc:
+        logger.error(
+            "private material catalog search failed: "
+            f"error={type(exc).__name__}, detail={_redact_request_error(exc, api_key)}"
+        )
+        return []
+
+
 def search_videos_pixabay(
     search_term: str,
     minimum_duration: int,
@@ -603,7 +697,9 @@ def search_videos_coverr(
     return []
 
 
-def save_video(video_url: str, save_dir: str = "") -> str:
+def save_video(
+    video_url: str, save_dir: str = "", download_headers: dict[str, str] | None = None
+) -> str:
     if not save_dir:
         save_dir = utils.storage_dir("cache_videos")
 
@@ -623,6 +719,8 @@ def save_video(video_url: str, save_dir: str = "") -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     }
+    if download_headers:
+        headers.update(download_headers)
 
     # if video does not exist, download it
     with open(video_path, "wb") as f:
@@ -661,6 +759,83 @@ def save_video(video_url: str, save_dir: str = "") -> str:
                         f"failed to close video clip: {video_path}, error: {str(close_error)}"
                     )
     return ""
+
+
+def _resolve_private_catalog_path(item: MaterialInfo) -> str:
+    """Resolve a catalog relative path only inside the read-only mount."""
+    catalog_config = getattr(config, "material_catalog", {})
+    root_text = str(catalog_config.get("share_volume", "")).strip()
+    relative_text = item.catalog_path
+    if not relative_text and isinstance(item.source_info, dict):
+        relative_text = item.source_info.get("catalog_path")
+    if not root_text or not isinstance(relative_text, str) or not relative_text.strip():
+        return ""
+    relative = Path(relative_text)
+    if relative.is_absolute() or ".." in relative.parts:
+        logger.warning("rejecting private catalog path outside its shared volume")
+        return ""
+    try:
+        root = Path(root_text).resolve()
+        candidate = (root / relative).resolve()
+        candidate.relative_to(root)
+    except (OSError, ValueError):
+        logger.warning("rejecting private catalog path outside its shared volume")
+        return ""
+    try:
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            return str(candidate)
+    except OSError:
+        pass
+    return ""
+
+
+def _record_private_catalog_use(item: MaterialInfo, task_id: str | None = None) -> None:
+    catalog_config = getattr(config, "material_catalog", {})
+    base_url = str(catalog_config.get("base_url", "")).strip().rstrip("/")
+    source_info = item.source_info if isinstance(item.source_info, dict) else {}
+    asset_id = source_info.get("asset_id")
+    if not base_url or asset_id in (None, ""):
+        return
+    headers = {"User-Agent": "MoneyPrinterTurbo/1.0"}
+    api_key = str(catalog_config.get("api_key", "")).strip()
+    if api_key:
+        headers["Authorization"] = api_key
+    try:
+        requests.post(
+            f"{base_url}/v1/videos/{asset_id}/used",
+            params={"task_id": task_id} if task_id else None,
+            headers=headers,
+            proxies=config.proxy,
+            verify=_get_tls_verify(),
+            timeout=(5, 15),
+        )
+    except Exception as exc:
+        logger.warning(
+            "failed to record private catalog material use: "
+            f"error={type(exc).__name__}"
+        )
+
+
+def save_material(
+    item: MaterialInfo, save_dir: str = "", task_id: str | None = None
+) -> str:
+    """Use a validated shared catalog file or retain the normal HTTP cache path."""
+    catalog_config = getattr(config, "material_catalog", {})
+    if item.provider == "private_catalog":
+        catalog_path = _resolve_private_catalog_path(item)
+        if catalog_path:
+            logger.info(f"using private catalog material without copying: {catalog_path}")
+            _record_private_catalog_use(item, task_id)
+            return catalog_path
+    api_key = str(catalog_config.get("api_key", "")).strip()
+    download_headers = {"Authorization": api_key} if api_key else None
+    if download_headers:
+        return save_video(
+            video_url=item.url,
+            save_dir=save_dir,
+            download_headers=download_headers,
+        )
+    return save_video(video_url=item.url, save_dir=save_dir)
 
 
 def _search_videos_with_cache(
@@ -774,6 +949,9 @@ def download_videos(
     elif source == "coverr":
         provider = "coverr"
         remote_search_videos = search_videos_coverr
+    elif source == "private_catalog":
+        provider = "private_catalog"
+        remote_search_videos = search_videos_private_catalog
 
     def search_videos(
         search_term: str,
@@ -840,8 +1018,8 @@ def download_videos(
                 f"downloading {item.provider} video: "
                 f"asset_id={source_info.get('asset_id') or 'unknown'}"
             )
-            saved_video_path = save_video(
-                video_url=item.url, save_dir=material_directory
+            saved_video_path = save_material(
+                item, save_dir=material_directory, task_id=task_id
             )
             if saved_video_path:
                 logger.info(f"video saved: {saved_video_path}")
@@ -943,8 +1121,8 @@ def _download_videos_by_script_order(
                     f"downloading ordered {item.provider} video for {search_term!r}: "
                     f"asset_id={source_info.get('asset_id') or 'unknown'}"
                 )
-                saved_video_path = save_video(
-                    video_url=item.url, save_dir=material_directory
+                saved_video_path = save_material(
+                    item, save_dir=material_directory, task_id=task_id
                 )
                 if saved_video_path:
                     logger.info(f"video saved: {saved_video_path}")

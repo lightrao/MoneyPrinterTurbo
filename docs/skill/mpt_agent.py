@@ -25,7 +25,7 @@ PROJECT_ARCHIVE_URL = (
 DEFAULT_ROOT = Path.home() / "MoneyPrinterTurbo"
 DEFAULT_VOICE_NAME = "zh-CN-XiaoxiaoNeural-Female"
 NEEDS_INPUT_EXIT_CODE = 10
-SUPPORTED_SOURCES = {"pexels", "pixabay", "coverr", "local"}
+SUPPORTED_SOURCES = {"pexels", "pixabay", "coverr", "private_catalog", "local"}
 PEXELS_API_KEY_URL = "https://www.pexels.com/api/"
 PEXELS_VALIDATION_URL = "https://api.pexels.com/v1/collections?per_page=1"
 PEXELS_API_KEY_HELP_URL = (
@@ -307,7 +307,7 @@ def missing_config(config_path: Path, cli_args: list[str]) -> tuple[str, list[st
     source = selected_video_source(cli_args)
     if source not in SUPPORTED_SOURCES:
         raise SkillError(f"unsupported video source: {source}")
-    if source != "local":
+    if source not in {"local", "private_catalog"}:
         value = _plain_config_value(text, f"{source}_api_keys")
         if not _has_configured_value(value):
             missing.append(f"{source}_api_keys")

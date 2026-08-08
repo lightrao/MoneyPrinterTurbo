@@ -332,3 +332,73 @@ Always:
   the rendered model before `up -d`;
 - keep WebUI/API on `127.0.0.1` and use the documented SSH forward for
   any user-side testing.
+
+## Private material catalog integration
+
+`MPTMaterialCatalog` is a separate internal Compose project. It is not a
+replacement for the existing MPT storage directory and must be staged before
+MPT is switched to the new source.
+
+| Item | Value |
+| --- | --- |
+| Catalog project | `/data/projects/mpt-material-catalog` |
+| Catalog API | `127.0.0.1:8085` on HP450 |
+| Admin tunnel | Mac `127.0.0.1:18085 -> HP450 127.0.0.1:8085` |
+| Internal Docker network | `mpt-catalog-net` |
+| Catalog videos | `/data/projects/mpt-material-catalog/videos` |
+| MPT read-only mount | `/MaterialCatalog/videos:ro` |
+| MPT source | `private_catalog` |
+
+The catalog API and worker use an independent SHA-pinned GHCR image and
+secrets. MPT receives only the catalog URL/read key and a read-only bind mount;
+it does not receive the Pexels import key. Search misses stay local and never
+fall back to `api.pexels.com`.
+
+Create the external network and start catalog first. Only after `/healthz`,
+`/readyz`, the admin capacity view, and the 50–100 asset validation batch pass
+should the MPT Compose project be restarted with its catalog network and
+read-only volume. Keep the existing MPT ports on loopback; do not add a
+Cloudflare route or watchdog entry.
+
+The MPT `[material_catalog]` section reads:
+
+```toml
+[material_catalog]
+mode = "local"
+base_url = "http://mpt-material-api:8080"
+api_key = "replace-with-catalog-read-key"
+share_volume = "/MaterialCatalog/videos"
+```
+
+The `private_catalog` source appears in the WebUI source dropdown only when
+`mode`, `base_url`, and `share_volume` are all configured. Tasks that select
+it must generate videos without touching the official Pexels API; an MPT
+log line such as `searching videos on pexels` should not appear in those
+runs.
+
+To roll back, restore the previous MPT image/config, select `pexels` again,
+remove the catalog config/network/volume from the MPT Compose project, and
+leave the catalog data directory intact. Never use `down -v` or Docker global
+prune.
+
+## 2026-08-08 catalog staging snapshot (code-only)
+
+On 2026-08-08, the MPT side of this integration was written and validated
+without a live HP450 staging run. The following local checks passed on this
+Mac:
+
+- `uv run pytest -q` reports `543 passed, 11 skipped, 4153 subtests passed`
+  including new `TestPrivateMaterialCatalog` cases for the Pexels-shaped
+  search response, the read-only shared-volume path, the catalog path
+  traversal fallback, and a `private_catalog` cache round-trip.
+- `uv run ruff check app cli.py webui docs/skill test` is clean.
+- `uv run python -m compileall -q app cli.py webui docs/skill test` is clean.
+- `docker compose --env-file .env -f deploy/hp450/compose.yml config`
+  resolves to two services plus the external `mpt-catalog-net` network
+  with the read-only bind mount under `${MPT_MATERIAL_VIDEO_DIR}`.
+
+The Docker daemon was not running on this Mac during the snapshot, so the
+catalog image itself was not built locally. HP450 staging will publish the
+catalog image through GitHub Actions (private repo, public GHCR) and pull it
+with the same `crane` fallback that MPT uses when GHCR is slow. Until HP450
+staging completes, the catalog source must remain disabled in MPT.

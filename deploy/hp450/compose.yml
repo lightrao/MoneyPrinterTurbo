@@ -3,6 +3,7 @@ name: moneyprinterturbo
 x-common-volumes: &common-volumes
   - ./config.toml:/MoneyPrinterTurbo/config.toml:rw
   - ./storage:/MoneyPrinterTurbo/storage:rw
+  - ${MPT_MATERIAL_VIDEO_DIR:-/data/projects/mpt-material-catalog/videos}:/MaterialCatalog/videos:ro
 
 x-common-settings: &common-settings
   pull_policy: always
@@ -49,6 +50,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+    networks:
+      - default
+      - mpt-catalog-net
 
   api:
     <<: *common-settings
@@ -72,3 +76,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+    networks:
+      - default
+      - mpt-catalog-net
+
+networks:
+  mpt-catalog-net:
+    external: true
+    name: mpt-catalog-net

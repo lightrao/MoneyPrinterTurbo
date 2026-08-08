@@ -55,6 +55,9 @@ class MaterialInfo:
     provider: str = "pexels"
     url: str = ""
     duration: int = 0
+    # private_catalog 命中时，catalog_path 是 catalog API 返回的相对路径；
+    # MPT 会在只读共享卷中严格解析它，避免把整份素材再次下载到 cache_videos。
+    catalog_path: Optional[str] = None
     # 在线素材搜索会附带经过筛选的公开来源信息，供搜索缓存和任务记录复用。
     # 本地上传素材不需要填写；写入任务文件前仍会按字段白名单重新构造，
     # 避免外部请求传入的签名 URL、凭据或无关字段进入持久化数据。

@@ -2387,6 +2387,12 @@ def _render_video_settings(panel, params):
                 (tr("Coverr"), "coverr"),
                 (tr("Local file"), "local"),
             ]
+            if (
+                config.material_catalog.get("mode") == "local"
+                and config.material_catalog.get("base_url")
+                and config.material_catalog.get("share_volume")
+            ):
+                video_sources.insert(0, (tr("Private Material Catalog"), "private_catalog"))
 
             saved_video_source_name = config.app.get("video_source", "pexels")
 
@@ -3906,7 +3912,13 @@ def _render_generation_controls(
             st.error(tr("Video Script and Subject Cannot Both Be Empty"))
             st.stop()
 
-        if params.video_source not in ["pexels", "pixabay", "coverr", "local"]:
+        if params.video_source not in [
+            "pexels",
+            "pixabay",
+            "coverr",
+            "private_catalog",
+            "local",
+        ]:
             _remove_active_generation_task(task_id)
             st.error(tr("Please Select a Valid Video Source"))
             st.stop()
@@ -3930,6 +3942,15 @@ def _render_generation_controls(
         ):
             _remove_active_generation_task(task_id)
             st.error(tr("Please Enter the Coverr API Key"))
+            st.stop()
+
+        if params.video_source == "private_catalog" and not (
+            config.material_catalog.get("mode") == "local"
+            and config.material_catalog.get("base_url")
+            and config.material_catalog.get("share_volume")
+        ):
+            _remove_active_generation_task(task_id)
+            st.error(tr("Private Material Catalog Not Configured"))
             st.stop()
 
         if (

@@ -49,6 +49,11 @@ pixabay_api_keys = []
 # Register at https://coverr.co/developers?ctx=header_navigation
 coverr_api_keys = []
 
+# Optional internal MPTMaterialCatalog. When configured, selecting
+# "private_catalog" searches this local-first service and reads validated files
+# from the read-only shared volume; it never falls back to api.pexels.com.
+# The API key here is a catalog read key, not the Pexels key.
+
 # Optional TwelveLabs integration for semantic material ranking and video QA.
 # Install the optional dependency with: uv sync --extra twelvelabs
 # Create an API key at https://playground.twelvelabs.io/
