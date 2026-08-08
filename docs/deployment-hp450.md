@@ -235,3 +235,100 @@ stable observation period, evaluate adding container presence, TCP checks, and
 HTTP health checks to the watchdog as a separate change. Public Cloudflare
 exposure is also a separate change requiring both tunnel ingress and Access
 policy review.
+
+## Live operation baseline (2026-08-08, end-to-end verified)
+
+This fork is in its first stable LAN-only observation window. The items below
+were observed directly on HP450 and the Mac during the same calendar day; they
+are listed here so future operators do not have to rediscover them.
+
+- Production image reference (loopback-only):
+  `ghcr.io/lightrao/moneyprinterturbo:sha-a3bea03dc4420c39943b4de996cd7b7261074350`
+- GHCR package: public; no GitHub token is stored on HP450.
+- Containers: `moneyprinterturbo-api` and `moneyprinterturbo-webui` are both
+  `healthy` from the Compose healthcheck. The API container and the WebUI
+  container each expose their inner port on `127.0.0.1`; only the WebUI's
+  `8501` is published to the host loopback by the Compose file.
+- `/data` available space: approximately `856 GiB`; storage directory
+  `/data/projects/moneyprinterturbo/storage` was `189 MiB` after the first
+  successful end-to-end render and `199 MiB` after a second configuration
+  save; bulk growth comes from `cache_videos/` and per-task `tasks/<uuid>/`.
+- API liveness check: `GET /openapi.json` (OpenAPI `3.1.0`, 12 paths).
+  `/ping` is not registered in the current router.
+- WebUI liveness check: `GET /_stcore/health` returns `ok`.
+- Mac SSH forward that is the only production entry point in this phase:
+  `127.0.0.1:18501 -> HP450 127.0.0.1:8501` and
+  `127.0.0.1:18080 -> HP450 127.0.0.1:8080`. Both ports stay unreachable
+  through the host LAN address (`192.168.10.109`).
+- API SSH forward also serves static media at
+  `http://127.0.0.1:18080/tasks/<task_id>/<file>` with HTTP `206` for
+  Range requests, so a Mac browser can stream `final-1.mp4` directly without
+  any container-side launcher.
+- Pexels reachability from HP450 and from inside the WebUI container was
+  verified with `--noproxy "*"` and without any `HTTP_PROXY` /
+  `HTTPS_PROXY` / `ALL_PROXY` environment variables; `api.pexels.com`
+  answered with `401` (expected without a key) and the TLS handshake
+  succeeded. The fork can use Pexels without the host proxy.
+- The Mac `gh` token used in this session had `write:packages` scope to
+  publish and inspect GHCR images. Rotate or revoke it on the GitHub
+  settings page if the workstation is shared.
+
+## Known WebUI limitations in this deployment shape
+
+The WebUI is designed for a same-machine desktop session, but HP450 exposes
+the WebUI only through the SSH tunnel. Two control buttons in the task
+manager therefore do not work as their label suggests, even though the
+generated video itself is fully playable:
+
+- "Play" / "Open Video" in the task manager calls `xdg-open` (or `open`
+  / `os.startfile`) inside the WebUI container. The slim image does not
+  include `xdg-utils`, and there is no display in the container, so the
+  call raises `FileNotFoundError: 'xdg-open'` and is logged in
+  `webui/Main.py`. The user sees no visible effect.
+- "Open Task Folder" calls `webbrowser.open("file://...")` against the
+  server's filesystem path. The container has no browser, so the call
+  silently no-ops. The path is also not reachable from the Mac's file
+  manager over the SSH forward.
+
+The video file itself is intact and browser-playable:
+
+- Path on HP450:
+  `/data/projects/moneyprinterturbo/storage/tasks/<task-id>/final-1.mp4`
+- File system type: bind mount from `/data/projects/moneyprinterturbo`
+  (`0770` storage root, container `root`, mode `0644` for generated files).
+- Container `ffprobe` report for a 49.1 s render: `H.264 High` video at
+  `1080x1920`, `yuv420p`; `AAC-LC` audio; `mov,mp4,m4a,3gp,3g2,mj2`
+  container. `ffmpeg` decode-to-null check: pass.
+- Mac browser playback works directly through the API forward
+  (`http://127.0.0.1:18080/tasks/<task-id>/final-1.mp4`).
+- `scp` from HP450 is the supported way to copy the artifact to the Mac
+  for local playback or upload.
+
+These are design limitations, not blockers. The user has indicated they do
+not need in-browser playback or in-page downloads in this phase, so no code
+change is required to proceed. If browser-side playback is added later, it
+must live in `webui/Main.py` and respect the existing SSH tunnel topology
+without exposing loopback ports.
+
+## Recording discipline for this fork
+
+The fork's CI matrix runs on every push to
+`feat/siliconflow-cloned-voice-v2` (Python 3.11, Python 3.13, Windows
+smoke). Publishes use a reviewed `v1.3.3-hp450.<date>` tag plus the
+auto-generated `sha-<commit>` tag. Never:
+
+- record API keys or full `speech:` URIs in commits, comments, or this
+  runbook;
+- copy `config.toml` into the image, the Compose file, or the repository;
+- print the contents of `config.toml` in terminal output or CI logs;
+- run a global Docker prune or restart to "fix" MPT problems.
+
+Always:
+
+- use the full SHA tag in `.env` and never overwrite it with a
+  semver-only marker;
+- back up `.env` and `config.toml` before any planned change;
+- run `docker compose --env-file .env -f compose.yml config` to validate
+  the rendered model before `up -d`;
+- keep WebUI/API on `127.0.0.1` and use the documented SSH forward for
+  any user-side testing.
