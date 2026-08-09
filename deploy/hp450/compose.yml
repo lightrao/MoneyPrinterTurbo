@@ -24,14 +24,14 @@ services:
     image: ${MPT_IMAGE:?MPT_IMAGE is required}
     container_name: moneyprinterturbo-webui
     ports:
-      - "127.0.0.1:8501:8501"
+      - "${MPT_LAN_BIND_IP:-127.0.0.1}:8501:8501"
     command:
       - streamlit
       - run
       - ./webui/Main.py
       - --server.address=0.0.0.0
       - --server.port=8501
-      - --browser.serverAddress=127.0.0.1
+      - --browser.serverAddress=${MPT_WEBUI_PUBLIC_HOST:-127.0.0.1}
       - --server.enableCORS=True
       - --browser.gatherUsageStats=False
       - --client.toolbarMode=minimal
@@ -59,7 +59,7 @@ services:
     image: ${MPT_IMAGE:?MPT_IMAGE is required}
     container_name: moneyprinterturbo-api
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${MPT_LAN_BIND_IP:-127.0.0.1}:8080:8080"
     command:
       - python3
       - main.py

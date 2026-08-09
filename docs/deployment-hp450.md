@@ -19,15 +19,15 @@ public GHCR image: ghcr.io/lightrao/moneyprinterturbo:sha-<full-sha>
         v
 HP450 /data/projects/moneyprinterturbo
         |
-        +-- 127.0.0.1:8501  Streamlit WebUI
-        +-- 127.0.0.1:8080  FastAPI
-        |
-        +-- Mac SSH local forwarding for LAN access
+        +-- ${MPT_LAN_BIND_IP}:8501  Streamlit WebUI
+        +-- ${MPT_LAN_BIND_IP}:8080  FastAPI and task media
 ```
 
-The host is not exposed directly on the LAN or Internet. Do not add a
-Cloudflare Tunnel, Access application, reverse proxy, or firewall rule as part
-of this initial deployment.
+The default binding is loopback. HP450 currently sets `MPT_LAN_BIND_IP` to its
+active LAN IPv4 for direct browser access from the trusted LAN and sets
+`MPT_WEBUI_PUBLIC_HOST=mpt.local` so Streamlit upload/WebSocket origins match
+the browser URL. Do not use `0.0.0.0`, add a Cloudflare Tunnel, Access
+application, or reverse proxy.
 
 ## Image policy
 
@@ -139,7 +139,9 @@ ssh hp450-lan 'set -eu
 ```
 
 Copy the checked-in Compose file and environment template. The actual `.env`
-must contain the final full SHA and nothing else:
+must contain the final full SHA plus the safe loopback defaults from
+`deploy/hp450/env.example`; the HP450 LAN sync service changes only the
+reviewed bind/host keys at runtime:
 
 ```bash
 scp deploy/hp450/compose.yml hp450-lan:/data/projects/moneyprinterturbo/compose.yml
@@ -193,18 +195,27 @@ Do not use `docker system prune`, `docker compose down` in another project,
 
 ## LAN access
 
-Keep both host bindings on loopback and use an SSH forward from the Mac:
+The default Compose value remains loopback-only. To allow browser-only access
+from every device on HP450's current LAN, set the server's active LAN IPv4 in
+`.env` and recreate the WebUI and API:
 
 ```bash
-ssh -N \
-  -L 18501:127.0.0.1:8501 \
-  -L 18080:127.0.0.1:8080 \
-  hp450-lan
+MPT_LAN_BIND_IP=192.168.10.109
+
+docker compose --env-file .env -f compose.yml up -d --pull never \
+  --force-recreate webui api
 ```
 
-Open `http://127.0.0.1:18501` for the WebUI and
-`http://127.0.0.1:18080/docs` for API documentation. Ports 8501 and 8080
-should remain unreachable through the server's LAN address.
+The HP450 deployment accepted this mode on 2026-08-09. Open
+`http://mpt.local:8501` for the WebUI and
+`http://mpt.local:8080/docs` for API documentation. The API port is needed
+by browser video links. Docker binds both ports to the LAN IPv4 itself, not
+`0.0.0.0`, so they are not simultaneously published on Tailscale or another
+host interface. MoneyPrinterTurbo has no WebUI login boundary: enable this
+mode only on a trusted LAN. The HP450 LAN sync service updates the bind IP and
+recreates only `webui`/`api` after the active Wi-Fi route is stable; invalid or
+non-RFC1918 addresses fail closed to loopback and remove the Catalog mDNS
+aliases.
 
 ## Health and smoke checks
 
@@ -278,6 +289,10 @@ policy review.
 This fork is in its first stable LAN-only observation window. The items below
 were observed directly on HP450 and the Mac during the same calendar day; they
 are listed here so future operators do not have to rediscover them.
+
+This section records the original loopback-only acceptance. It was superseded
+on 2026-08-09 by the browser-only LAN binding documented under **LAN access**;
+the image, health, storage, and media validation facts below remain valid.
 
 - Production image reference (loopback-only):
   `ghcr.io/lightrao/moneyprinterturbo:sha-a3bea03dc4420c39943b4de996cd7b7261074350`
@@ -367,8 +382,8 @@ Always:
 - back up `.env` and `config.toml` before any planned change;
 - run `docker compose --env-file .env -f compose.yml config` to validate
   the rendered model before `up -d`;
-- keep WebUI/API on `127.0.0.1` and use the documented SSH forward for
-  any user-side testing.
+- keep WebUI/API on either the default `127.0.0.1` or the explicit trusted-LAN
+  `MPT_LAN_BIND_IP`; never publish them on `0.0.0.0`;
 
 ## Private material catalog integration
 
@@ -379,8 +394,8 @@ MPT is switched to the new source.
 | Item | Value |
 | --- | --- |
 | Catalog project | `/data/projects/mpt-material-catalog` |
-| Catalog API | `127.0.0.1:8085` on HP450 |
-| Admin tunnel | Mac `127.0.0.1:18085 -> HP450 127.0.0.1:8085` |
+| Catalog API | `${MPTC_LAN_BIND_IP:-127.0.0.1}:8085` on HP450 |
+| Admin UI | `http://hp450g4.local:8085/admin/gallery/` with Basic auth |
 | Internal Docker network | `mpt-catalog-net` |
 | Catalog videos | `/data/projects/mpt-material-catalog/videos` |
 | MPT read-only mount | `/MaterialCatalog/videos:ro` |
@@ -394,8 +409,8 @@ fall back to `api.pexels.com`.
 Create the external network and start catalog first. Only after `/healthz`,
 `/readyz`, the admin capacity view, and the 50 asset validation batch pass
 should the MPT Compose project be restarted with its catalog network and
-read-only volume. Keep the existing MPT ports on loopback; do not add a
-Cloudflare route or watchdog entry.
+read-only volume. Keep the existing MPT ports on loopback or the explicit
+trusted-LAN IP; do not add a Cloudflare route or watchdog entry.
 
 The MPT `[material_catalog]` section reads:
 

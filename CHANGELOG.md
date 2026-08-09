@@ -6,6 +6,9 @@ which is the fork deployed on HP450.
 
 ## Unreleased
 
+- HP450 LAN browser access now supports the fixed `mpt.local` host while
+  retaining explicit active-IPv4 port binding. The Streamlit browser address
+  is configurable so uploads and WebSockets work from the LAN hostname.
 - Switch the WebUI source dropdown to `private_catalog` on HP450 once the
   50-asset Catalog batch finishes acceptance.
 - Promote the three new MPT integration tests to the regression matrix so
