@@ -411,3 +411,24 @@ pending the manual package visibility change. HP450 Catalog containers are
 healthy on the external network and the production Catalog holds exactly 3
 pilot assets; Pexels Key runtime cleanup passed. MPT was not restarted or
 joined to the Catalog network, and its source remains `pexels`.
+
+## 2026-08-09 catalog v0.1.3 cumulative-10 acceptance
+
+Catalog release `v0.1.3` at commit `bf2e38d` passed CI, fresh migration,
+fixture, coverage, and `linux/amd64` image checks. Its published manifest is
+`sha256:72602ae58f4e91c612f3fe5ae40828c6bc169d54806d2f705fa0f30e2391ee92`;
+HP450 runs the Docker-loaded local digest
+`sha256:47697319a15e27fd30b21545e872e6e6142aef8bf811677674bd40cb7549b07f`
+with `--pull never`.
+
+The three existing pilot assets were preserved and four controlled jobs
+(`2/2/2/1`) imported seven more. HP450 acceptance passed with exactly 10 ready
+unique Pexels IDs and SHA-256 files, exact `1080x1920` dimensions, ffprobe
+validation, no `.part` files, healthy capacity, and healthy API/Worker
+containers. The read-only `/admin/gallery/` returned 10 assets, matched the
+Read API category result, returned Range `206`, and did not change usage.
+
+The Pexels key was cleared from the Catalog `.env`, API runtime, and Worker
+runtime. MPT was not restarted, did not join `mpt-catalog-net`, and continues
+to use `pexels`; the 50-asset batch, MPT cutover, and rollback drill remain
+pending.

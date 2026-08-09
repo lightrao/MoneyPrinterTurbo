@@ -11,6 +11,19 @@ which is the fork deployed on HP450.
 - Promote the three new MPT integration tests to the regression matrix so
   any future `save_material` refactor keeps the read-key scoping guarantee.
 
+## 2026-08-09 - Catalog Gallery cumulative-10 accepted
+
+- Catalog `v0.1.3` (`bf2e38d`) is deployed on HP450 with published
+  `linux/amd64` manifest digest
+  `sha256:72602ae58f4e91c612f3fe5ae40828c6bc169d54806d2f705fa0f30e2391ee92`.
+- The Catalog now has exactly 10 ready unique Pexels assets: the existing
+  three-asset pilot plus the controlled `2/2/2/1` seven-asset increment.
+  Gallery search/category results match the Catalog Read API, and Gallery
+  playback does not change Catalog usage.
+- The temporary Pexels key was cleared from the Catalog `.env`, API runtime,
+  and Worker runtime. MPT was not restarted or switched to `private_catalog`;
+  its source remains `pexels` while the 50-asset batch stays pending.
+
 ## 2026-08-09 - Catalog staging snapshot (3-asset pilot accepted)
 
 - `f23f3a1 docs(hp450): record three-asset catalog pilot`
