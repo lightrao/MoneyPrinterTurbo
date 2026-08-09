@@ -381,10 +381,11 @@ remove the catalog config/network/volume from the MPT Compose project, and
 leave the catalog data directory intact. Never use `down -v` or Docker global
 prune.
 
-## 2026-08-09 catalog staging snapshot (published, HP450 not reached)
+## 2026-08-09 catalog staging snapshot (3-asset pilot accepted)
 
-On 2026-08-09, the MPT side and Catalog release were validated without a live
-HP450 staging run. The following checks passed:
+On 2026-08-09, the MPT side and Catalog release were validated locally and the
+Catalog empty deployment plus a 3-asset HP450 pilot were accepted. The
+following checks passed:
 
 - `uv run pytest -q` reports `544 passed, 11 skipped, 4153 subtests passed`
   including new `TestPrivateMaterialCatalog` cases for the Pexels-shaped
@@ -398,10 +399,10 @@ HP450 staging run. The following checks passed:
   with the read-only bind mount under `${MPT_MATERIAL_VIDEO_DIR}`.
 
 The Catalog repository is private at `lightrao/MPTMaterialCatalog`, release
-`v0.1.1`, with the `linux/amd64` manifest digest
-`sha256:73bf7d84ec65a7fbc56a4b5d0cd6118e731da648e9b3724a5ba205d863d6135d`.
+`v0.1.2`, with the `linux/amd64` manifest digest
+`sha256:33162f2e1d956c3745fb89d5b0db17c00ecb74ddb55b3d83d97dc6bd91e24ae7`.
 GitHub Actions built and published it; the package is currently private
-pending the manual package visibility change. The configured `hp450` SSH route
-timed out during banner exchange, so no HP450 staging writes were attempted.
-Until SSH and package visibility are resolved, the catalog source must remain
-disabled in MPT.
+pending the manual package visibility change. HP450 Catalog containers are
+healthy on the external network and the production Catalog holds exactly 3
+pilot assets; Pexels Key runtime cleanup passed. MPT was not restarted or
+joined to the Catalog network, and its source remains `pexels`.
