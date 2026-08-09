@@ -3,6 +3,11 @@
 This document describes the LAN-only deployment of the fork's
 `feat/siliconflow-cloned-voice-v2` branch on the HP450 Debian 13 Docker host.
 
+A release-by-release summary of what landed in this fork lives in
+`../CHANGELOG.md`. The companion Catalog project documents live in
+`https://github.com/lightrao/MPTMaterialCatalog` (`docs/architecture.md`,
+`docs/api-contract.md`, `CHANGELOG.md`).
+
 ## Topology
 
 ```text
