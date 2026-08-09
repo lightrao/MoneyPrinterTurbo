@@ -76,6 +76,38 @@ Compare SHA-256 on both sides before loading the temporary file. After the
 image is loaded and healthchecks pass, remove the archive and start Compose
 with `--pull never` so a transient GHCR issue cannot trigger another pull.
 
+The `private_catalog` GHCR package (`ghcr.io/lightrao/mpt-material-catalog`)
+is also private on 2026-08-09. Use the same shape, but reach HP450 through
+`hp450-auto` (which prefers LAN before Tailscale and Cloudflare) and expect a
+~224 MiB `mpt-material-catalog-v<X.Y.Z>.docker.tar`. The freshest catalog
+deploy validated on this Mac used the resumable transfer below after a plain
+`scp` was interrupted at the SSH banner exchange; the partial `.new` file
+sitting on HP450 was reused as the resume offset:
+
+```bash
+rsync -av --partial --append --timeout=60 \
+  /private/tmp/mpt-material-catalog-v<X.Y.Z>.docker.tar \
+  hp450-auto:/data/projects/mpt-material-catalog/mpt-material-catalog-v<X.Y.Z>.docker.tar.new
+
+ssh -o ConnectTimeout=20 hp450-auto '
+  test "$(sha256sum /data/projects/mpt-material-catalog/mpt-material-catalog-v<X.Y.Z>.docker.tar.new | cut -d" " -f1)" = "<mac sha256>"
+  && mv /data/projects/mpt-material-catalog/mpt-material-catalog-v<X.Y.Z>.docker.tar.new \
+       /data/projects/mpt-material-catalog/mpt-material-catalog-v<X.Y.Z>.docker.tar
+  && docker load -i /data/projects/mpt-material-catalog/mpt-material-catalog-v<X.Y.Z>.docker.tar
+'
+```
+
+Notes:
+
+- Always write to a `.tar.new` path on HP450, then `mv` it to the final name
+  only after the SHA matches. Never point `docker load` at a `.new` file.
+- macOS rsync versions older than 3.2.4 do not support `--append-verify`;
+  plain `--append --partial` is sufficient because the SHA comparison on both
+  sides still catches any drift.
+- The SSH banner exchange through `hp450-lan` can stall for an unrelated
+  transient Cloudflare flap; `hp450-auto` and `hp450-remote` are the
+  reproducible paths to use here.
+
 ## HP450 layout
 
 ```text
