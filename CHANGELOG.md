@@ -13,9 +13,9 @@ which is the fork deployed on HP450.
 
 ## 2026-08-09 - Catalog Gallery cumulative-10 accepted
 
-- Catalog `v0.1.3` (`bf2e38d`) is deployed on HP450 with published
+- Catalog `v0.1.4` (`8d18d13`) is deployed on HP450 with published
   `linux/amd64` manifest digest
-  `sha256:72602ae58f4e91c612f3fe5ae40828c6bc169d54806d2f705fa0f30e2391ee92`.
+  `sha256:1175afd3cf37fad54482caaf9925d569a76108651d7701c5dc4dbc901b67adfb`.
 - The Catalog now has exactly 10 ready unique Pexels assets: the existing
   three-asset pilot plus the controlled `2/2/2/1` seven-asset increment.
   Gallery search/category results match the Catalog Read API, and Gallery
@@ -23,6 +23,8 @@ which is the fork deployed on HP450.
 - The temporary Pexels key was cleared from the Catalog `.env`, API runtime,
   and Worker runtime. MPT was not restarted or switched to `private_catalog`;
   its source remains `pexels` while the 50-asset batch stays pending.
+- The v0.1.4 importer hotfix normalized duplicate candidates to `skipped` and
+  removed orphan `.part` files; production import state is consistent.
 
 ## 2026-08-09 - Catalog staging snapshot (3-asset pilot accepted)
 

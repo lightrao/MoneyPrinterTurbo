@@ -412,13 +412,13 @@ healthy on the external network and the production Catalog holds exactly 3
 pilot assets; Pexels Key runtime cleanup passed. MPT was not restarted or
 joined to the Catalog network, and its source remains `pexels`.
 
-## 2026-08-09 catalog v0.1.3 cumulative-10 acceptance
+## 2026-08-09 catalog v0.1.4 cumulative-10 acceptance
 
-Catalog release `v0.1.3` at commit `bf2e38d` passed CI, fresh migration,
+Catalog release `v0.1.4` at commit `8d18d13` passed CI, fresh migration,
 fixture, coverage, and `linux/amd64` image checks. Its published manifest is
-`sha256:72602ae58f4e91c612f3fe5ae40828c6bc169d54806d2f705fa0f30e2391ee92`;
+`sha256:1175afd3cf37fad54482caaf9925d569a76108651d7701c5dc4dbc901b67adfb`;
 HP450 runs the Docker-loaded local digest
-`sha256:47697319a15e27fd30b21545e872e6e6142aef8bf811677674bd40cb7549b07f`
+`sha256:e4b05714d70f1c77173d8f8902ee85f4b9cdc2ecbec0d8e5df4283526b3af64f`
 with `--pull never`.
 
 The three existing pilot assets were preserved and four controlled jobs
@@ -432,3 +432,5 @@ The Pexels key was cleared from the Catalog `.env`, API runtime, and Worker
 runtime. MPT was not restarted, did not join `mpt-catalog-net`, and continues
 to use `pexels`; the 50-asset batch, MPT cutover, and rollback drill remain
 pending.
+The importer hotfix normalized two duplicate candidates to `skipped` and
+removed their orphan `.part` files; no `downloading` import items remain.
