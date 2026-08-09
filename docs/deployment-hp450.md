@@ -355,7 +355,7 @@ it does not receive the Pexels import key. Search misses stay local and never
 fall back to `api.pexels.com`.
 
 Create the external network and start catalog first. Only after `/healthz`,
-`/readyz`, the admin capacity view, and the 50–100 asset validation batch pass
+`/readyz`, the admin capacity view, and the 50 asset validation batch pass
 should the MPT Compose project be restarted with its catalog network and
 read-only volume. Keep the existing MPT ports on loopback; do not add a
 Cloudflare route or watchdog entry.
@@ -381,24 +381,27 @@ remove the catalog config/network/volume from the MPT Compose project, and
 leave the catalog data directory intact. Never use `down -v` or Docker global
 prune.
 
-## 2026-08-08 catalog staging snapshot (code-only)
+## 2026-08-09 catalog staging snapshot (published, HP450 not reached)
 
-On 2026-08-08, the MPT side of this integration was written and validated
-without a live HP450 staging run. The following local checks passed on this
-Mac:
+On 2026-08-09, the MPT side and Catalog release were validated without a live
+HP450 staging run. The following checks passed:
 
-- `uv run pytest -q` reports `543 passed, 11 skipped, 4153 subtests passed`
+- `uv run pytest -q` reports `544 passed, 11 skipped, 4153 subtests passed`
   including new `TestPrivateMaterialCatalog` cases for the Pexels-shaped
-  search response, the read-only shared-volume path, the catalog path
-  traversal fallback, and a `private_catalog` cache round-trip.
+  search response, Catalog read-key scoping, the read-only shared-volume path,
+  the catalog path traversal fallback, and a `private_catalog` cache
+  round-trip.
 - `uv run ruff check app cli.py webui docs/skill test` is clean.
 - `uv run python -m compileall -q app cli.py webui docs/skill test` is clean.
 - `docker compose --env-file .env -f deploy/hp450/compose.yml config`
   resolves to two services plus the external `mpt-catalog-net` network
   with the read-only bind mount under `${MPT_MATERIAL_VIDEO_DIR}`.
 
-The Docker daemon was not running on this Mac during the snapshot, so the
-catalog image itself was not built locally. HP450 staging will publish the
-catalog image through GitHub Actions (private repo, public GHCR) and pull it
-with the same `crane` fallback that MPT uses when GHCR is slow. Until HP450
-staging completes, the catalog source must remain disabled in MPT.
+The Catalog repository is private at `lightrao/MPTMaterialCatalog`, release
+`v0.1.1`, with the `linux/amd64` manifest digest
+`sha256:73bf7d84ec65a7fbc56a4b5d0cd6118e731da648e9b3724a5ba205d863d6135d`.
+GitHub Actions built and published it; the package is currently private
+pending the manual package visibility change. The configured `hp450` SSH route
+timed out during banner exchange, so no HP450 staging writes were attempted.
+Until SSH and package visibility are resolved, the catalog source must remain
+disabled in MPT.
